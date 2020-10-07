@@ -1,0 +1,71 @@
+#import modules
+import netCDF4 as NC
+import xarray as xr
+import pandas as pd
+import numpy as np
+import statistics as st
+import xgcm
+
+#variables within the NetCDF URL to specify time steps and positions 
+time=7
+nele=9
+
+#specifying monthly datasets
+March ='http://www.smast.umassd.edu:8080/thredds/dodsC/models/fvcom/NECOFS/Archive/NECOFS_GOM/2019/gom4_201903.nc?lonc[0:1:'+ str(nele) +'],latc[0:1:'+ str(nele) +'],time[0:1:'+ str(time) +'],u[0:1:'+ str(time) +'][2:2:2][0:1:'+ str(nele) +'],v[0:1:'+ str(time) +'][2:2:2][0:1:'+ str(nele) +']'
+April ='http://www.smast.umassd.edu:8080/thredds/dodsC/models/fvcom/NECOFS/Archive/NECOFS_GOM/2019/gom4_201904.nc?lonc[0:1:'+ str(nele) +'],latc[0:1:'+ str(nele) +'],time[0:1:'+ str(time) +'],u[0:1:'+ str(time) +'][2:2:2][0:1:'+ str(nele) +'],v[0:1:'+ str(time) +'][2:2:2][0:1:'+ str(nele) +']'
+May ='http://www.smast.umassd.edu:8080/thredds/dodsC/models/fvcom/NECOFS/Archive/NECOFS_GOM/2019/gom4_201905.nc?lonc[0:1:'+ str(nele) +'],latc[0:1:'+ str(nele) +'],time[0:1:'+ str(time) +'],u[0:1:'+ str(time) +'][2:2:2][0:1:'+ str(nele) +'],v[0:1:'+ str(time) +'][2:2:2][0:1:'+ str(nele) +']'
+
+#opening URLs
+march = xr.open_dataset(March, decode_times=False)
+april = xr.open_dataset(April, decode_times=False)
+may = xr.open_dataset(May, decode_times=False)
+
+#identifying variables from within the URL 
+v_mc=march.variables['v']
+u_mc=march.variables['u']
+v_ap=april.variables['v']
+u_ap=april.variables['u']
+v_my=may.variables['v']
+u_my=may.variables['u']
+lonc=march.variables['lonc']
+latc=march.variables['latc']
+time=march.variables['time']
+
+#building datasets from the URL data
+mc = xr.Dataset({'east_mc':(['time','siglay','nele'], u_mc),'north_mc':(['time','siglay','nele'], v_mc)}, coords={ 'latc':(['nele'], latc),'lonc':(['nele'], lonc), 'time':(['time'], time)}) 
+ap = xr.Dataset({'east_ap':(['time','siglay','nele'], u_ap),'north_ap':(['time','siglay','nele'], v_ap)}, coords={ 'latc':(['nele'], latc),'lonc':(['nele'], lonc), 'time':(['time'], time)})
+my = xr.Dataset({'east_my':(['time','siglay','nele'], u_my),'north_my':(['time','siglay','nele'], v_my)}, coords={ 'latc':(['nele'], latc),'lonc':(['nele'], lonc), 'time':(['time'], time)})
+
+#calulcate max current for each month throughout time
+mc_max = mc_current.max(dim='time')
+ap_max = ap_current.max(dim='time')
+my_max = my_current.max(dim='time')
+
+#rename variable
+mc_max.name = 'mc_current'
+ap_max.name = 'ap_current'
+
+#append to dataframe
+mc_df = mc_max.to_dataframe()
+ap_df = ap_max.to_dataframe()
+my_df = my_max.to_dataframe()
+my_max.name = 'my_current' #renaming a new column in the dataframe
+
+#joining monthyl data to main dataframe
+join = mc_df.join(ap_df.ap_current)
+join_final = join.join(my_df.my_current)
+
+#calculating final seasonal maximum from all three months
+seasonal_max = join_final[['mc_current','ap_current','my_current']].max(axis=1)
+
+#append the seasonal max back to a dataframe, rename and drop column which are no longer needed
+ss = list()
+for l in seasonal_max:
+    ss.append(join_final[['mc_current','ap_current','my_current']].max(axis=1))
+    
+season_matrix = pd.concat(ss,axis=1)
+join_max = join_final.join(season_matrix[0])
+
+join_max.rename(columns = {0 : 'max_current'}, inplace = True)
+maximum_current = join_max.drop(['mc_current','ap_current','my_current'], axis=1)
+
